@@ -76,11 +76,9 @@ class Api:
         _save(CFG_PATH, config)
         return {"status": "success"}
 
-    # ---------- 诊断连接 ----------
     def diagnose(self):
         if not config.get("api_key"):
             return {"status": "error", "message": "API Key 为空"}
-
         base = config["api_base"].rstrip("/")
         key = config["api_key"]
         info = {
@@ -92,7 +90,6 @@ class Api:
             "key_has_space": (" " in key or "\n" in key or "\t" in key or "\r" in key),
             "url_to_try": base + "/models"
         }
-
         try:
             r = requests.get(base + "/models", headers=_headers(), timeout=15)
             info["http_status"] = r.status_code
@@ -109,7 +106,6 @@ class Api:
             info["result"] = "❌ 请求异常：" + str(e)
             info["http_status"] = None
             info["response_preview"] = None
-
         try:
             r2 = requests.get(base + "/models",
                               headers={"x-api-key": key, "Content-Type": "application/json"},
@@ -119,10 +115,8 @@ class Api:
         except Exception as e:
             info["xapikey_status"] = "异常"
             info["xapikey_preview"] = str(e)
-
         return {"status": "success", "info": info}
 
-    # ---------- 拉取模型 ----------
     def list_models(self):
         if not config.get("api_key"):
             return {"status": "error", "message": "请先设置 API Key"}
@@ -147,7 +141,6 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": _friendly_err(e)}
 
-    # ---------- 项目 ----------
     def get_projects(self, module):
         ps = [p for p in projects() if p.get("type") == module]
         ps.sort(key=lambda x: x.get("updated_at", 0), reverse=True)
@@ -184,7 +177,6 @@ class Api:
         save_projects([p for p in projects() if p["id"] != pid])
         return {"status": "success"}
 
-    # ---------- 文本 ----------
     def text_chat(self, messages, images=None, model=None, temperature=0.7, max_tokens=4096):
         if not config.get("api_key"):
             return {"status": "error", "message": "请先设置 API Key"}
@@ -216,7 +208,6 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": _friendly_err(e)}
 
-    # ---------- 图片 ----------
     def generate_image(self, prompt, size="2K", ratio="1:1", images=None, model=None):
         if not config.get("api_key"):
             return {"status": "error", "message": "请先设置 API Key"}
@@ -241,7 +232,6 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": _friendly_err(e)}
 
-    # ---------- 视频 ----------
     def create_video_task(self, prompt, mode="text", size="720P",
                           aspect_ratio="16:9", seconds="5", images=None, model=None):
         if not config.get("api_key"):
