@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Agnes AI</title>
+<style>
+:root{
+  --nav1:#1a1a24; --nav2:#fafbfc; --content:#ffffff;
+  --text:#1a1a1a; --dim:#888; --accent:#3b82f6;
+  --border:#e5e7eb; --canvas:#0f0f12; --panel:#1c1c22;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;overflow:hidden;background:var(--content);color:var(--text);}
+#app{display:flex;height:100vh;}
+
+#nav1{width:80px;background:var(--nav1);display:flex;flex-direction:column;align-items:center;padding-top:16px;flex-shrink:0;}
+.nav-item{width:64px;height:64px;margin-bottom:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#666;font-size:11px;cursor:pointer;border-radius:12px;transition:.2s;}
+.nav-item:hover{color:#fff;background:rgba(255,255,255,.06);}
+.nav-item.active{color:#fff;background:rgba(59,130,246,.22);}
+.nav-item .ico{font-size:22px;margin-bottom:2px;}
+
+#nav2{width:260px;background:var(--nav2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
+.new-task{margin:16px;padding:12px;background:#fff;border:1px solid var(--border);border-radius:8px;color:var(--accent);font-weight:600;text-align:center;cursor:pointer;transition:.2s;font-size:14px;}
+.new-task:hover{background:#eff6ff;border-color:var(--accent);}
+.section-label{padding:0 20px;color:#999;font-size:11px;margin-top:10px;margin-bottom:6px;}
+#project-list{flex:1;overflow-y:auto;padding:0 10px 20px;}
+.proj{padding:10px 12px;border-radius:8px;cursor:pointer;color:#555;font-size:13.5px;display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;transition:.1s;border-left:2px solid transparent;}
+.proj:hover{background:#e5e7eb;}
+.proj.active{background:#dbeafe;color:var(--accent);font-weight:500;border-left-color:var(--accent);}
+.proj .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;display:flex;align-items:center;gap:6px;}
+.proj .status-dot{width:8px;height:8px;border-radius:50%;background:#10b981;flex-shrink:0;display:none;}
+.proj .status-dot.generating{background:#f59e0b;display:inline-block;animation:pulse 1.4s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.proj .del{color:#bbb;font-size:12px;padding:2px 6px;border-radius:4px;visibility:hidden;}
+.proj:hover .del{visibility:visible;}
+.proj .del:hover{color:#e11d48;background:#fff;}
+.empty-tip{color:#aaa;font-size:12px;text-align:center;margin-top:30px;}
+
+#content{flex:1;position:relative;overflow:hidden;background:var(--content);}
+.view{position:absolute;inset:0;display:none;flex-direction:column;}
+.view.active{display:flex;}
+
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#999;}
+.empty-state .icon{font-size:56px;margin-bottom:16px;opacity:.35;}
+.empty-state .title{font-size:15px;color:#666;margin-bottom:6px;}
+.empty-state .desc{font-size:12px;color:#aaa;}
+
+.history{flex:1;overflow-y:auto;padding:24px 10%;display:none;}
+.history.has-content{display:block;}
+
+.msg{max-width:80%;margin-bottom:16px;padding:12px 16px;border-radius:12px;line-height:1.7;font-size:14px;white-space:pre-wrap;word-wrap:break-word;}
+.msg.user{background:#dbeafe;margin-left:auto;}
+.msg.ai{background:#f3f4f6;}
+.msg .msg-imgs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.msg .msg-imgs img{max-width:120px;max-height:120px;border-radius:8px;display:block;}
+
+.input-panel{padding:16px 8%;border-top:1px solid #f0f0f0;background:#fff;}
+.input-box{border:1px solid #e0e0e0;border-radius:14px;padding:14px 16px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.03);transition:.2s;position:relative;}
+.input-box:focus-within{border-color:var(--accent);box-shadow:0 2px 14px rgba(59,130,246,.1);}
+
+.input-main{flex:1;position:relative;}
+
+.input-editor{
+  width:100%;
+  min-height:100px;
+  max-height:400px;
+  overflow-y:auto;
+  padding:2px 36px 2px 0;
+  font-size:14px;
+  line-height:1.7;
+  outline:none;
+  white-space:pre-wrap;
+  word-wrap:break-word;
+  transition:.2s;
+}
+.input-editor:empty::before{
+  content:attr(data-placeholder);
+  color:#bbb;
+  pointer-events:none;
+}
+.input-editor.expanded{
+  min-height:400px;
+  max-height:60vh;
+}
+
+.expand-btn{position:absolute;top:4px;right:0;width:28px;height:28px;border-radius:6px;background:#f5f5f5;border:none;cursor:pointer;color:#666;font-size:14px;display:flex;align-items:center;justify-content:center;transition:.15s;z-index:5;}
+.expand-btn:hover{background:var(--accent);color:#fff;}
+
+.at-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  background:#eef4ff;
+  border:1px solid #c7dbff;
+  padding:1px 6px 1px 2px;
+  border-radius:8px;
+  vertical-align:middle;
+  margin:0 3px;
+  cursor:default;
+  user-select:none;
+  font-size:12px;
+  color:#3b82f6;
+}
+.at-chip img{
+  width:22px;height:22px;border-radius:6px;object-fit:cover;
+}
+.at-chip .chip-remove{
+  color:#888;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;
+}
+.at-chip .chip-remove:hover{color:#e11d48;}
+
+.at-preview{
+  position:fixed;
+  display:none;
+  z-index:3000;
+  padding:6px;
+  background:#fff;
+  border-radius:12px;
+  box-shadow:0 10px 40px rgba(0,0,0,.25);
+  border:1px solid #eee;
+  pointer-events:none;
+  max-width:340px;
+  max-height:340px;
+}
+.at-preview.show{display:block;}
+.at-preview img{max-width:320px;max-height:320px;border-radius:8px;display:block;}
+
+.at-popup{position:absolute;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:6px;width:260px;max-height:260px;overflow-y:auto;display:none;z-index:500;}
+.at-popup.show{display:block;}
+.at-popup .at-hint{font-size:11px;color:#999;padding:6px 10px;}
+.at-item{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;}
+.at-item:hover{background:#f0f7ff;}
+.at-item img{width:32px;height:32px;object-fit:cover;border-radius:6px;border:1px solid #eee;}
+.at-item .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#333;}
+
+.input-toolbar{display:flex;gap:8px;align-items:center;padding-top:10px;flex-wrap:wrap;}
+.tb-btn{padding:6px 10px;background:#f5f5f5;border:none;border-radius:8px;cursor:pointer;font-size:12px;color:#555;display:flex;align-items:center;gap:4px;transition:.15s;font-family:inherit;}
+.tb-btn:hover{background:#e8e8e8;}
+.tb-btn.primary{background:var(--accent);color:#fff;margin-left:auto;padding:8px 20px;font-weight:600;}
+.tb-btn.primary:hover{background:#2563eb;}
+.tb-btn.primary:disabled{opacity:.5;cursor:not-allowed;}
+.tb-select{padding:6px 8px;background:#f5f5f5;border:none;border-radius:8px;cursor:pointer;font-size:12px;color:#555;outline:none;font-family:inherit;max-width:220px;}
+
+.upload-row{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;}
+.upload-box{width:48px;height:48px;border:1px dashed #ccc;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#aaa;font-size:22px;transition:.15s;flex-shrink:0;background:#fff;}
+.upload-box:hover{border-color:var(--accent);color:var(--accent);}
+.asset-list{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-height:48px;align-items:center;}
+
+.asset-chip{position:relative;width:48px;height:48px;border-radius:8px;overflow:hidden;border:1px solid #eee;cursor:default;}
+.asset-chip img{width:100%;height:100%;object-fit:cover;}
+.asset-chip .rm{position:absolute;top:-1px;right:-1px;background:rgba(0,0,0,.65);color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:50%;cursor:pointer;}
+
+.gallery{padding:20px 8%;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;overflow-y:auto;flex:1;}
+.gallery img{width:100%;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.08);cursor:pointer;transition:.2s;}
+.gallery img:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.12);}
+
+.vid-list{padding:20px 8%;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;overflow-y:auto;flex:1;}
+.vid-card{background:#f9fafb;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+.vid-card video{width:100%;display:block;}
+.vid-card .info{padding:10px 12px;font-size:12px;color:#666;}
+
+#canvas-view{background:var(--canvas);color:#e0e0e0;}
+#canvas-wrap{flex:1;position:relative;overflow:hidden;}
+#grid{position:absolute;inset:0;background-image:radial-gradient(#2a2a32 1px,transparent 1px);background-size:20px 20px;transform-origin:0 0;pointer-events:none;}
+#nodes-layer{position:absolute;inset:0;transform-origin:0 0;}
+.node{position:absolute;background:var(--panel);border:1px solid #333;border-radius:10px;width:340px;box-shadow:0 10px 30px rgba(0,0,0,.6);}
+.node-header{padding:10px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid #333;font-size:12px;color:#888;display:flex;justify-content:space-between;cursor:grab;border-radius:10px 10px 0 0;}
+.node-body{padding:14px;display:flex;flex-direction:column;gap:8px;position:relative;}
+.node textarea{width:100%;height:70px;background:#0f0f12;color:#fff;border:1px solid #333;border-radius:6px;padding:8px;resize:none;outline:none;font-family:inherit;font-size:13px;}
+.node button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;}
+.node img{max-width:100%;border-radius:6px;}
+.node .node-tools{display:flex;gap:6px;font-size:11px;}
+.node .node-tools .mini{padding:4px 8px;background:#2a2a32;color:#ccc;border-radius:5px;cursor:pointer;border:none;font-size:11px;}
+.node .node-tools .mini:hover{background:#3a3a42;color:#fff;}
+#canvas-bottom{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid #333;border-radius:12px;padding:8px 16px;display:flex;gap:10px;align-items:center;z-index:50;box-shadow:0 10px 30px rgba(0,0,0,.5);}
+.tool-btn{background:transparent;border:none;color:#ccc;cursor:pointer;padding:6px 10px;border-radius:6px;font-size:13px;}
+.tool-btn:hover{background:rgba(255,255,255,.1);color:#fff;}
+.tool-btn.primary{background:var(--accent);color:#fff;font-weight:500;padding:6px 14px;}
+
+#ctx-menu{position:fixed;background:var(--panel);border:1px solid #333;border-radius:8px;padding:6px;width:190px;z-index:1000;display:none;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.6);}
+.ctx-item{padding:9px 12px;border-radius:6px;color:#e0e0e0;font-size:13px;cursor:pointer;}
+.ctx-item:hover{background:#2a2a32;}
+
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:2000;}
+.modal-mask.show{display:flex;}
+.modal{background:#fff;border-radius:12px;width:560px;max-height:88vh;overflow-y:auto;padding:26px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 40px rgba(0,0,0,.2);}
+.modal h3{font-size:16px;margin-bottom:4px;}
+.modal .form-row{display:flex;flex-direction:column;gap:6px;}
+.modal label{font-size:12px;color:#666;}
+.modal input,.modal select{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;outline:none;font-family:inherit;font-size:13px;background:#fff;}
+.modal input:focus,.modal select:focus{border-color:var(--accent);}
+.modal .row{display:flex;gap:10px;justify-content:flex-end;margin-top:6px;}
+.modal button{padding:9px 18px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;}
+.btn-ghost{background:#f0f0f0;color:#333;}
+.btn-primary{background:var(--accent);color:#fff;}
+.hint{font-size:11px;color:#999;line-height:1.7;background:#f9f9f9;padding:10px 12px;border-radius:8px;}
+.fetch-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.fetch-row button{background:#eef4ff;color:var(--accent);padding:8px 14px;font-weight:500;}
+.diag-box{display:none;background:#f5f5f5;padding:12px;border-radius:8px;font-size:11px;max-height:240px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;font-family:Consolas,Monaco,monospace;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="nav1">
+    <div class="nav-item active" data-m="chat" onclick="switchModule('chat')"><div class="ico">💬</div>对话</div>
+    <div class="nav-item" data-m="image" onclick="switchModule('image')"><div class="ico">🖼️</div>图片</div>
+    <div class="nav-item" data-m="video" onclick="switchModule('video')"><div class="ico">🎬</div>视频</div>
+    <div class="nav-item" data-m="canvas" onclick="switchModule('canvas')"><div class="ico">🎨</div>画布</div>
+    <div class="nav-item" onclick="openSettings()"><div class="ico">⚙️</div>设置</div>
+    <div class="nav-item" onclick="alert('资产库开发中')"><div class="ico">📁</div>资产</div>
+  </div>
+
+  <div id="nav2">
+    <div class="new-task" onclick="newTask()">＋ 新建任务</div>
+    <div class="section-label">最近</div>
+    <div id="project-list"></div>
+  </div>
+
+  <div id="content">
+    <div class="view active" id="chat-view">
+      <div class="history" id="chat-history"></div>
+      <div class="empty-state" id="chat-empty">
+        <div class="icon">💬</div>
+        <div class="title">这是一个新的会话</div>
+        <div class="desc">在下方输入框开始第一次对话</div>
+      </div>
+      <div class="input-panel">
+        <div class="input-box">
+          <div class="upload-row">
+            <div class="upload-box" onclick="document.getElementById('chat-ref').click()">+</div>
+            <div class="asset-list" id="chat-assets"></div>
+          </div>
+          <div class="input-main">
+            <button class="expand-btn" onclick="toggleExpand('chat-input')" title="放大/缩小输入框">⤢</button>
+            <div class="input-editor" id="chat-input" contenteditable="true" data-placeholder="输入消息... 按 @ 引用素材，Enter 发送，Shift+Enter 换行"></div>
+            <div class="at-popup" id="chat-at"></div>
+          </div>
+          <div class="input-toolbar">
+            <select class="tb-select" id="chat-model"><option value="">默认模型</option></select>
+            <button class="tb-btn" onclick="alert('提示词库开发中')">📚 提示词库</button>
+            <button class="tb-btn primary" id="chat-send" onclick="sendChat()">发送</button>
+          </div>
+        </div>
+        <input type="file" id="chat-ref" accept="image/*" multiple style="display:none">
+      </div>
+    </div>
+
+    <div class="view" id="image-view">
+      <div class="history" id="img-history"><div class="gallery" id="img-gallery"></div></div>
+      <div class="empty-state" id="img-empty">
+        <div class="icon">🖼️</div>
+        <div class="title">这是一个新的图片任务</div>
+        <div class="desc">在下方输入框描述画面，按 @ 引用参考图</div>
+      </div>
+      <div class="input-panel">
+        <div class="input-box">
+          <div class="upload-row">
+            <div class="upload-box" onclick="document.getElementById('img-ref').click()">+</div>
+            <div class="asset-list" id="image-assets"></div>
+          </div>
+          <div class="input-main">
+            <button class="expand-btn" onclick="toggleExpand('img-prompt')" title="放大/缩小输入框">⤢</button>
+            <div class="input-editor" id="img-prompt" contenteditable="true" data-placeholder="描述你想要的画面... 按 @ 引用素材"></div>
+            <div class="at-popup" id="img-at"></div>
+          </div>
+          <div class="input-toolbar">
+            <select class="tb-select" id="img-model"><option value="">默认模型</option></select>
+            <select class="tb-select" id="img-size"><option>1K</option><option selected>2K</option><option>3K</option><option>4K</option></select>
+            <select class="tb-select" id="img-ratio"><option selected>1:1</option><option>4:3</option><option>3:4</option><option>16:9</option><option>9:16</option></select>
+            <button class="tb-btn primary" id="img-gen" onclick="doImage()">生成</button>
+          </div>
+        </div>
+        <input type="file" id="img-ref" accept="image/*" multiple style="display:none">
+      </div>
+    </div>
+
+    <div class="view" id="video-view">
+      <div class="history" id="vid-history"><div class="vid-list" id="vid-list"></div></div>
+      <div class="empty-state" id="vid-empty">
+        <div class="icon">🎬</div>
+        <div class="title">这是一个新的视频任务</div>
+        <div class="desc">在下方输入描述，支持文生/图生/全能参考</div>
+      </div>
+      <div class="input-panel">
+        <div class="input-box">
+          <div class="upload-row">
+            <div class="upload-box" onclick="document.getElementById('vid-ref').click()">+</div>
+            <div class="asset-list" id="video-assets"></div>
+          </div>
+          <div class="input-main">
+            <button class="expand-btn" onclick="toggleExpand('vid-prompt')" title="放大/缩小输入框">⤢</button>
+            <div class="input-editor" id="vid-prompt" contenteditable="true" data-placeholder="描述你想要的视频... 按 @ 引用素材"></div>
+            <div class="at-popup" id="vid-at"></div>
+          </div>
+          <div class="input-toolbar">
+            <select class="tb-select" id="vid-model"><option value="">默认模型</option></select>
+            <select class="tb-select" id="vid-mode">
+              <option value="text">文生视频</option>
+              <option value="image">图生视频</option>
+              <option value="ref">全能参考</option>
+            </select>
+            <select class="tb-select" id="vid-size"><option>720P</option></select>
+            <select class="tb-select" id="vid-ratio"><option>16:9</option><option>9:16</option><option>1:1</option></select>
+            <select class="tb-select" id="vid-seconds">
+              <option value="5">5秒</option>
+              <option value="10">10秒</option>
+              <option value="12">12秒</option>
+            </select>
+            <button class="tb-btn primary" id="vid-gen" onclick="doVideo()">生成</button>
+          </div>
+          <div id="vid-status" style="font-size:12px;color:#888;margin-top:8px;"></div>
+        </div>
+        <input type="file" id="vid-ref" accept="image/*" multiple style="display:none">
+      </div>
+    </div>
+
+    <div class="view" id="canvas-view">
+      <div id="canvas-wrap">
+        <div id="grid"></div>
+        <div id="nodes-layer"></div>
+        <div id="canvas-bottom">
+          <button class="tool-btn primary" onclick="addNodeFromButton()">＋ 新建节点</button>
+          <button class="tool-btn" onclick="zoom(0.9)">➖</button>
+          <span id="zoom-display" style="color:#888;font-size:13px;min-width:50px;text-align:center;">100%</span>
+          <button class="tool-btn" onclick="zoom(1.1)">➕</button>
+          <button class="tool-btn" onclick="resetZoom()">🔄</button>
+          <button class="tool-btn" onclick="saveCanvas()">💾 保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="ctx-menu">
+  <div class="ctx-item" onclick="addNode('text')">📄 文本节点</div>
+  <div class="ctx-item" onclick="addNode('image')">🖼️ 图片节点</div>
+  <div class="ctx-item" onclick="addNode('video')">🎬 视频节点</div>
+</div>
+
+<div class="modal-mask" id="node-picker">
+  <div class="modal" style="width:320px;">
+    <h3>新建节点</h3>
+    <div class="ctx-item" style="color:#333;padding:12px;" onclick="addNode('text');closeNodePicker()">📄 文本节点</div>
+    <div class="ctx-item" style="color:#333;padding:12px;" onclick="addNode('image');closeNodePicker()">🖼️ 图片节点</div>
+    <div class="ctx-item" style="color:#333;padding:12px;" onclick="addNode('video');closeNodePicker()">🎬 视频节点</div>
+  </div>
+</div>
+
+<div class="modal-mask" id="settings-modal">
+  <div class="modal">
+    <h3>设置</h3>
+    <div class="hint">支持任意 OpenAI 兼容接口：Agnes、OpenAI、DeepSeek、Ollama 等。<br>填写好 URL 和 Key 后，点「诊断连接」验证，再点「拉取模型列表」自动获取模型。</div>
+    <div class="form-row"><label>API Base URL</label><input type="text" id="set-base" placeholder="https://apihub.agnes-ai.com/v1"></div>
+    <div class="form-row"><label>API Key</label><input type="password" id="set-key" placeholder="sk-..."></div>
+    <div class="fetch-row">
+      <button onclick="fetchModels()">🔄 拉取模型列表</button>
+      <button onclick="diagnose()">🔍 诊断连接</button>
+      <span id="fetch-status" style="font-size:12px;color:#888;"></span>
+    </div>
+    <pre id="diag-result" class="diag-box"></pre>
+    <div class="form-row"><label>文本模型</label><select id="set-model-text"></select></div>
+    <div class="form-row"><label>图片模型</label><select id="set-model-image"></select></div>
+    <div class="form-row"><label>视频模型</label><select id="set-model-video"></select></div>
+    <div class="row">
+      <button class="btn-ghost" onclick="closeSettings()">取消</button>
+      <button class="btn-primary" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
