@@ -18,10 +18,14 @@ window.addEventListener('pywebviewready', async () => {
   previewEl.innerHTML = '<img>';
   document.body.appendChild(previewEl);
 
-  const cfg = await window.pywebview.api.get_config();
-  fillSettings(cfg);
-  if (!cfg.api_key) openSettings();
-  else loadAllModelLists();
+  try {
+    const cfg = await window.pywebview.api.get_config();
+    fillSettings(cfg);
+    if (!cfg.api_key) openSettings();
+    else loadAllModelLists();
+  } catch (e) {
+    console.error('启动失败', e);
+  }
   switchModule('chat');
 });
 
@@ -37,15 +41,19 @@ function filterModelsByType(type) {
 }
 
 async function loadAllModelLists() {
-  const res = await window.pywebview.api.list_models();
-  if (res.status !== 'success') return;
-  const models = res.models || [];
-  if (!models.length) return;
-  allModelsCache = models;
-  const cfg = await window.pywebview.api.get_config();
-  populateModelSelect('chat-model', filterModelsByType('text'), cfg.model_text);
-  populateModelSelect('img-model', filterModelsByType('image'), cfg.model_image);
-  populateModelSelect('vid-model', filterModelsByType('video'), cfg.model_video);
+  try {
+    const res = await window.pywebview.api.list_models();
+    if (res.status !== 'success') return;
+    const models = res.models || [];
+    if (!models.length) return;
+    allModelsCache = models;
+    const cfg = await window.pywebview.api.get_config();
+    populateModelSelect('chat-model', filterModelsByType('text'), cfg.model_text);
+    populateModelSelect('img-model', filterModelsByType('image'), cfg.model_image);
+    populateModelSelect('vid-model', filterModelsByType('video'), cfg.model_video);
+  } catch (e) {
+    console.error('加载模型失败', e);
+  }
 }
 
 function populateModelSelect(id, models, current) {
@@ -66,12 +74,15 @@ function populateModelSelect(id, models, current) {
 
 // ===== 模块切换 =====
 async function switchModule(m) {
-  if (currentProjectId) await autoSave();
+  try {
+    if (currentProjectId) await autoSave();
+  } catch (e) {}
   currentModule = m;
   currentProjectId = null;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.m === m));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById(m + '-view').classList.add('active');
+  const v = document.getElementById(m + '-view');
+  if (v) v.classList.add('active');
   await refreshProjects();
   updateEmptyState();
 }
@@ -79,40 +90,44 @@ async function switchModule(m) {
 // ===== 项目列表 =====
 async function refreshProjects() {
   const list = document.getElementById('project-list');
-  const ps = await window.pywebview.api.get_projects(currentModule);
-  list.innerHTML = '';
-  if (!ps.length) {
-    list.innerHTML = '<div class="empty-tip">还没有任务，点上方按钮新建</div>';
-    return;
+  try {
+    const ps = await window.pywebview.api.get_projects(currentModule);
+    list.innerHTML = '';
+    if (!ps.length) {
+      list.innerHTML = '<div class="empty-tip">还没有任务，点上方按钮新建</div>';
+      return;
+    }
+    ps.forEach(p => {
+      const el = document.createElement('div');
+      el.className = 'proj' + (p.id === currentProjectId ? ' active' : '');
+      const isGenerating = generatingSet.has(p.id);
+      el.innerHTML = `
+        <span class="name">
+          <span class="status-dot ${isGenerating ? 'generating' : ''}"></span>
+          ${p.name}
+        </span>
+        <span class="del">✕</span>`;
+      el.onclick = (e) => {
+        if (e.target.classList.contains('del')) return;
+        openProject(p.id);
+      };
+      el.querySelector('.del').onclick = async (e) => {
+        e.stopPropagation();
+        if (confirm('删除「' + p.name + '」？')) {
+          await window.pywebview.api.delete_project(p.id);
+          if (currentProjectId === p.id) { currentProjectId = null; clearCurrentView(); updateEmptyState(); }
+          refreshProjects();
+        }
+      };
+      list.appendChild(el);
+    });
+  } catch (e) {
+    console.error(e);
   }
-  ps.forEach(p => {
-    const el = document.createElement('div');
-    el.className = 'proj' + (p.id === currentProjectId ? ' active' : '');
-    const isGenerating = generatingSet.has(p.id);
-    el.innerHTML = `
-      <span class="name">
-        <span class="status-dot ${isGenerating ? 'generating' : ''}"></span>
-        ${p.name}
-      </span>
-      <span class="del">✕</span>`;
-    el.onclick = (e) => {
-      if (e.target.classList.contains('del')) return;
-      openProject(p.id);
-    };
-    el.querySelector('.del').onclick = async (e) => {
-      e.stopPropagation();
-      if (confirm('删除「' + p.name + '」？')) {
-        await window.pywebview.api.delete_project(p.id);
-        if (currentProjectId === p.id) { currentProjectId = null; clearCurrentView(); updateEmptyState(); }
-        refreshProjects();
-      }
-    };
-    list.appendChild(el);
-  });
 }
 
 async function newTask() {
-  if (currentProjectId) await autoSave();
+  try { if (currentProjectId) await autoSave(); } catch (e) {}
   const nameMap = { chat: '新对话', image: '新图片任务', video: '新视频任务', canvas: '新画布' };
   const res = await window.pywebview.api.create_project(currentModule, nameMap[currentModule]);
   if (res.status === 'success') {
@@ -129,7 +144,7 @@ async function newTask() {
 
 async function openProject(pid) {
   if (currentProjectId === pid) return;
-  if (currentProjectId) await autoSave();
+  try { if (currentProjectId) await autoSave(); } catch (e) {}
   const res = await window.pywebview.api.get_project_data(pid);
   if (res.status !== 'success') return;
   currentProjectId = pid;
@@ -437,6 +452,7 @@ bindAt('vid-prompt', 'vid-at', 'video');
 
 // ===== 悬浮预览 =====
 function showPreview(base64, rect) {
+  if (!previewEl) return;
   const img = previewEl.querySelector('img');
   img.src = base64;
   previewEl.classList.add('show');
@@ -451,7 +467,7 @@ function showPreview(base64, rect) {
   previewEl.style.top = y + 'px';
 }
 function hidePreview() {
-  previewEl.classList.remove('show');
+  if (previewEl) previewEl.classList.remove('show');
 }
 
 // ===== 对话 =====
@@ -505,20 +521,25 @@ async function sendChat() {
 
   generatingSet.add(myPid);
   refreshProjects();
-  const model = document.getElementById('chat-model').value || null;
-  const res = await window.pywebview.api.text_chat(msgs, images, model);
-  generatingSet.delete(myPid);
-
-  btn.disabled = false;
-  tmp.remove();
-
-  if (res.status === 'success') {
-    await appendToProject(myPid, 'chat', {role: 'assistant', content: res.content});
-    if (currentProjectId === myPid) {
-      appendMsg('assistant', res.content);
+  try {
+    const model = document.getElementById('chat-model').value || null;
+    const res = await window.pywebview.api.text_chat(msgs, images, model);
+    generatingSet.delete(myPid);
+    btn.disabled = false;
+    tmp.remove();
+    if (res.status === 'success') {
+      await appendToProject(myPid, 'chat', {role: 'assistant', content: res.content});
+      if (currentProjectId === myPid) {
+        appendMsg('assistant', res.content);
+      }
+    } else {
+      if (currentProjectId === myPid) appendMsg('assistant', '[错误] ' + res.message);
     }
-  } else {
-    if (currentProjectId === myPid) appendMsg('assistant', '[错误] ' + res.message);
+  } catch (e) {
+    generatingSet.delete(myPid);
+    btn.disabled = false;
+    tmp.remove();
+    if (currentProjectId === myPid) appendMsg('assistant', '[错误] ' + e);
   }
   await refreshProjects();
 }
@@ -560,6 +581,8 @@ async function doImage() {
     } else {
       if (currentProjectId === myPid) alert('失败：' + res.message);
     }
+  } catch (e) {
+    if (currentProjectId === myPid) alert('异常：' + e);
   } finally {
     generatingSet.delete(myPid);
     btn.disabled = false; btn.textContent = '生成';
@@ -637,6 +660,8 @@ async function doVideo() {
     } else {
       if (currentProjectId === myPid) status.textContent = '失败：' + waitRes.message;
     }
+  } catch (e) {
+    if (currentProjectId === myPid) status.textContent = '异常：' + e;
   } finally {
     generatingSet.delete(myPid);
     btn.disabled = false; btn.textContent = '生成';
@@ -813,15 +838,20 @@ async function nodeGenImage(btn) {
   const list = window.nodeAssets.get(node) || [];
   const images = list.map(a => a.base64);
   btn.disabled = true; btn.textContent = '生成中...';
-  const res = await window.pywebview.api.generate_image(prompt, '2K', '1:1', images.length ? images : null);
-  btn.disabled = false; btn.textContent = '生成图片';
-  if (res.status === 'success') {
-    let img = node.querySelector('.node-body > img');
-    if (!img) { img = document.createElement('img'); node.querySelector('.node-body').appendChild(img); }
-    img.src = res.url;
-    if (currentProjectId) autoSave();
-  } else {
-    alert('失败：' + res.message);
+  try {
+    const res = await window.pywebview.api.generate_image(prompt, '2K', '1:1', images.length ? images : null);
+    btn.disabled = false; btn.textContent = '生成图片';
+    if (res.status === 'success') {
+      let img = node.querySelector('.node-body > img');
+      if (!img) { img = document.createElement('img'); node.querySelector('.node-body').appendChild(img); }
+      img.src = res.url;
+      if (currentProjectId) autoSave();
+    } else {
+      alert('失败：' + res.message);
+    }
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '生成图片';
+    alert('异常：' + e);
   }
 }
 
